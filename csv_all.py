@@ -214,7 +214,9 @@ if __name__ == "__main__":
     detailed = True                                     # if you want the detailed report on revision/stall/NA
     details_path="_details.csv"                         # what is the trailing file name you want for the detailed reports
     detailed_folder = './output_details/'        # where do you want to put the detailed files (note that this directory must exist)
-    folder_to_process = "./test_folder"               # the folder to input files (note that this directory must exist)
+    #--------------------------------------------------------------------------
+    folder_to_process = "./test_folder/"               # the folder to input files (note that this directory must exist)
+    #--------------------------------------------------------------------------
     summary_csv = "summary_TD.csv"                      # the output summary table
-    parse_all_chat_files_in_folder(folder_to_process, summary_csv, file_extension=file_extension, detailed=True, details_path=details_path, details_folder=detailed_folder)
+    parse_all_chat_files_in_folder(folder_to_process, summary_csv, file_extension=file_extension, detailed=detailed, details_path=details_path, details_folder=detailed_folder)
     print(f"Summary CSV generated at: {summary_csv}")
