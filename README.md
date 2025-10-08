@@ -35,14 +35,13 @@ Revision Rate: Percent of responses with a change in word(s) or morphosyntactic 
 ## 📁 Input format (CE/CHAT-style)
 
 * Files should contain speaker tiers like `*CHI:` and may include continuation lines.
-* Timestamps must appear inline as `\x15<start>_<end>\x15` (milliseconds), possibly multiple per utterance.
+* Timestamps must appear inline as `\x15<start>_<end>\x15` at the end of the utterance (consistent with CHAT format).
 * Target utterances must end with `"[+ xx]"` (any integer).
 
 **Example snippet**
 
 ```text
-*CHI: I want to go to the park \x15 123_256 \x15 (1.1) [/]. [+ 12]
-%com: child hesitates before 'park' \x15 300_420 \x15
+*CHI: I want to go  (1.1) to the park. \x15 123_256 \x15 [+ 12]
 *CHI: I went there yesterday. \x15 500_820 \x15 [+ 5]
 ```
 
@@ -157,25 +156,4 @@ parse_all_chat_files_in_folder(
 
 ---
 
-## 🧪 Minimal example
-
-```
-test_folder/
-└── child_sample.cex
-
-output_details/
-```
-
-Run:
-
-```bash
-python csv_all.py
-```
-
-You should get:
-
-* `summary_TD.csv`
-* `output_details/child_sample_details.csv` (if `detailed=True`)
-
----
 
