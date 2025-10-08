@@ -1,54 +1,34 @@
 # CHI Transcript Metrics (WPM, Stall Rate, Revision Rate)
 
-Compute **words-per-minute**, **stall rate**, and **revision rate** from CHAT/CEx-style transcript files in a folder.
+## Effortful sentence production measures
 
-This tool scans a directory of transcripts (e.g., `.cex` files), extracts child utterances (default `*CHI`), and produces:
+**Background**
 
-* A **summary CSV** with per-file metrics.
-* Optional **per-utterance detail CSVs** (one per input file) labeling each target utterance as `stall`, `revision`, or `n/a`.
+This program automates the computation stall rate, revision rate, and words per minute. Stall rate and revision rate are adapted from Rispoli and colleague’s theoretical framework for studying sentence disruptions.
+Stalls are disruption types that consist of repetitions, silent pauses, and utterance-internal filled pauses. Stalls signal a glitch or breakdown in the steady progression of incremental sentence production.
+In contrast, revisions reflect a speaker’s active self-monitoring of their articulated output relative to their intended message. When the two do not align, the speaker must revise.  See Rispoli, 2003; Rispoli et al., 2008; Rispoli, 2018 for theoretical motivation for stall and revision taxonomy.
+These measures have been used to examine the longitudinal association between stalls and revisions and simple sentence development (Rispoli, 2003; Rispoli et al., 2008; Rispoli, 2018), disruption patterns in school-age children with Attention Deficit Hyperactivity Disorder (ADHD; Bangert & Finestack, 2020), and disruptions in preschool-aged children with and without stuttering (Garbarino & Bernstein Ratner, 2023).
 
----
+**Intended use- Redmond Sentence Recall Application**
 
-## ✨ What it measures
+This program automates  the analysis of sentence disruptions using a stall vs. revision taxonomy. It was initially developed to examine stall rate, revision rate, non disrupted rate and words per minute between school-age children with developmental language disorder (DLD) and typical language (Preza et al., 2025), when scored off the Redmond Sentence Recall Task (Redmond et al., 2019).
+To successfully implement this program, transcripts should be in the Child Analysis of Transcripts (CHAT) or .cha format (MacWhinney, 2000). All utterances should be aligned to the audio and all disruptions should be transcribed following the CHAT manual and Preza et al. (2025).  For use on the Redmond Sentence Recall Task, all 16 child responses should be marked with a [+ #] post code.
 
-For each file:
+**Measures**
+This program computes the following measures:
+Stall Rate: Percent of responses with a repetition, silent pause, and/or utterance internal filled pause and NO revision.
+Non-disrupted rate: Percent of responses with no stall or revision.
+Words per minute : # of non-disrupted words / total time to produce all responses.
+Revision Rate: Percent of responses with a change in word(s) or morphosyntactic structure; may also contain a stall.
 
-* **WPM (All)** — Words per minute over **all** child utterances (including non-target ones).
-* **WPM (Target)** — Words per minute over **target** utterances only (those marked with `[...]` as described below).
-* **Stall Rate** — Fraction of **target** utterances that contain stalls.
-* **Revision Rate** — Fraction of **target** utterances that contain revisions.
-
-### How utterances are detected
-
-* Lines beginning with a speaker code (e.g., `*CHI:`, `%...`) start a new block. Continuation lines are appended.
-* Only utterances from the `identifier` speaker (default `*CHI`) are analyzed.
-
-### What counts as a **target** utterance
-
-An utterance is a **target** if its (timestamp-stripped) text **ends with** the pattern `"[+ xx]"`, e.g., `"[+ 23]"`.
-This is used as an inclusion flag for per-utterance metrics.
-
-### How words are counted
-
-* Timestamps and bracketed content are removed: `(...)`, `[...]`, `{...}`, `<...>`, and any `\x15start_end\x15` timecodes.
-* Tokens starting with `&` are ignored.
-* A word is an ASCII alpha token `[A-Za-z]+` optionally ending with a dot (e.g., `Dr.`).
-
-### How time is computed
-
-* The script collects all timecode pairs in an utterance that look like `\x15<start>_<end>\x15` (milliseconds).
-* Total utterance duration = sum over all `(end - start)` within that utterance.
-* WPM = `(total words / total seconds) * 60`. Computed separately for **all** utterances and **target** utterances.
-
-### Stall vs. Revision (applied only to **target** utterances)
-
-* **Revision** if the text contains `"[//]"`.
-* Else **Stall** if any of the following are present:
-
-  * `[/]`
-  * `&-`
-  * A **silent pause** `(X)` with `X ≥ 1.0`, e.g., `(1.2)`
-* Otherwise labeled `n/a`.
+**References**
+- Bangert, K. J., & Finestack, L. H. (2020). Linguistic maze production by children and adolescents with attention-deficit/hyperactivity disorder. *Journal of Speech, Language, and Hearing Research, 63*(1), 274–285. [https://doi.org/10.1044/2019_JSLHR-19-00187](https://doi.org/10.1044/2019_JSLHR-19-00187)
+- Garbarino, J., & Bernstein Ratner, N. (2023). Stalling for time: stall, revision, and stuttering-like disfluencies reflect language factors in the speech of young children. *Journal of Speech, Language, and Hearing Research, 66*(6), 2018–2034. [https://doi.org/10.1044/2023_JSLHR-22-00595](https://doi.org/10.1044/2023_JSLHR-22-00595)
+- MacWhinney, B. (2000). *The CHILDES Project: Tools for Analyzing Talk.* 3rd Edition. Mahwah, NJ: Lawrence Erlbaum Associates.
+- Redmond, S. M., Ash, A. C., Christopulos, T. T., & Pfaff, T. (2019). Diagnostic accuracy of sentence recall and past tense measures for identifying children’s language impairments. *Journal of Speech, Language, and Hearing Research, 62*(7), 2438–2454.
+- Rispoli, M. (2003). Changes in the nature of sentence production during the period of grammatical development. *Journal of Speech, Language, and Hearing Research, 46*(4), 818–830. [https://doi.org/10.1044/1092-4388(2003/064)](https://doi.org/10.1044/1092-4388%282003/064%29)
+- Rispoli, M. (2018). Changing the subject: The place of revisions in grammatical development. *Journal of Speech, Language, and Hearing Research, 61*(2), 360–372. [https://doi.org/10.1044/2017_JSLHR-L-17-0216](https://doi.org/10.1044/2017_JSLHR-L-17-0216)
+- Rispoli, M., Hadley, P., & Holt, J. (2008). Stalls and revisions: A developmental perspective on sentence production. *Journal of Speech, Language, and Hearing Research, 51*(4), 953–966. [https://doi.org/10.1044/1092-4388(2008/070)](https://doi.org/10.1044/1092-4388%282008/070%29)
 
 ---
 
@@ -132,28 +112,21 @@ If `detailed=True`, a CSV is written to `detailed_folder` with name `<input_base
 
 ---
 
-## ⚙️ Configuration (main script)
+## ⚙️ Classification rules used by this implementation
 
-Update these variables in the `__main__` block as needed:
+* **Revision** if the text contains `"[//]"`.
+* Else **Stall** if any of the following are present:
 
-| Variable            | Purpose                                    | Example               |
-| ------------------- | ------------------------------------------ | --------------------- |
-| `file_extension`    | Input transcript extension                 | `'.cex'`              |
-| `detailed`          | Write per-utterance detail CSVs            | `True`                |
-| `details_path`      | Suffix for detail CSV file names           | `'_details.csv'`      |
-| `detailed_folder`   | Output folder for detail CSVs (must exist) | `'./output_details/'` |
-| `folder_to_process` | Folder containing input transcripts        | `'./test_folder/'`    |
-| `summary_csv`       | Output path for summary CSV                | `'summary_TD.csv'`    |
+  * `[/]`
+  * `&-`
+  * A **silent pause** `(X)` with `X ≥ 1.0`, e.g., `(1.2)`
+* Otherwise labeled `n/a` (applied to **target** utterances only).
 
-Advanced (inside functions):
-
-* `identifier='*CHI'` — Change to a different speaker code if needed.
+> Words are counted after removing timestamps and bracketed content `()`, `[]`, `{}`, `<>`; tokens beginning with `&` are ignored.
 
 ---
 
 ## 🧩 Using as a library
-
-You can import and call the parser directly:
 
 ```python
 from csv_all import parse_chat_file, parse_all_chat_files_in_folder
@@ -184,4 +157,25 @@ parse_all_chat_files_in_folder(
 
 ---
 
+## 🧪 Minimal example
+
+```
+test_folder/
+└── child_sample.cex
+
+output_details/
+```
+
+Run:
+
+```bash
+python csv_all.py
+```
+
+You should get:
+
+* `summary_TD.csv`
+* `output_details/child_sample_details.csv` (if `detailed=True`)
+
+---
 
