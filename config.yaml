@@ -1,0 +1,19 @@
+folder_to_process: "../examples/input" #"./test_folder/"
+summary_csv: "summary_TD.csv"
+
+# File filtering & outputs
+file_extension: ".cex"
+detailed: true
+details_path: "_details.csv"
+details_folder: "../examples/output" #"./output_details/"
+
+# Selection logic (formerly "is_plus", now "filtered")
+conditions:
+  filtered:
+    any:
+      # A) Contains [+ <number>], i.e., old is_plus logic
+       - include: "\\[\\+\\s*\\d+\\]"
+
+      # B) Contains [+ rr] AND does NOT contain 'isp@x' (active declarative)
+       - include: "\\[\\+\\s*rr\\]"
+         exclude: "isp@x"
