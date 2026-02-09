@@ -1,8 +1,8 @@
-folder_to_process: "../examples/input" #"./test_folder/"
+folder_to_process: "../examples/sdpt" #"./test_folder/"
 summary_csv: "summary_TD.csv"
 
 # File filtering & outputs
-file_extension: ".cex"
+file_extension: ".cha"
 detailed: true
 details_path: "_details.csv"
 details_folder: "../examples/output" #"./output_details/"
@@ -11,9 +11,4 @@ details_folder: "../examples/output" #"./output_details/"
 conditions:
   filtered:
     any:
-      # A) Contains [+ <number>], i.e., old is_plus logic
-       - include: "\\[\\+\\s*\\d+\\]"
-
-      # B) Contains [+ rr] AND does NOT contain 'isp@x' (active declarative)
-       - include: "\\[\\+\\s*rr\\]"
-         exclude: "isp@x"
+      - include: '(?i)\[\s*\+\s*rr\s*\]\s*\[\s*\+\s*ads\s*\]\s*\[\s*\+\s*\d+\s*\]\s*$'
