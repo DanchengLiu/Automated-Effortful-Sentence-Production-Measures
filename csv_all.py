@@ -9,6 +9,7 @@ except ImportError:
     yaml = None
 
 
+# SDPT item groupings
 SIMPLE_ITEMS = {1, 4, 5, 7, 9, 10, 13, 15}
 PASSIVE_ITEMS = {2, 3, 6, 8, 11, 12, 14, 16}
 
@@ -18,11 +19,11 @@ def parse_chat_file(filepath, csv_output_path, detailed=False, identifier='*CHI'
     remove_timestamps_regex = re.compile(r'\x15.*?\x15')
     silent_pause_pattern = re.compile(r'\(\s*(\d+(\.\d+)?)\s*\)')
 
-    # New: extract trailing [+ xx] item id (must be at end)
+    # Match trailing [+ xx] (xx is digits) at end of utterance
     plus_item_at_end = re.compile(r'\[\s*\+\s*(\d+)\s*\]\s*$')
 
-    # Fallback filter: ends with [+ number]
-    ends_with_plus_number = re.compile(r'\[\s*\+\s*\d+\s*\]\s*$')
+    # Fallback predicate (if YAML not used): ONLY trailing [+ number]
+    ends_with_plus_number_at_end = re.compile(r'\[\s*\+\s*\d+\s*\]\s*$')
 
     # For word count (ignore bracketed content, and ignore words starting with '&')
     remove_brackets_pattern = re.compile(r'\([^)]*\)|\[[^\]]*\]|\{[^}]*\}|<[^>]*>')
@@ -62,6 +63,7 @@ def parse_chat_file(filepath, csv_output_path, detailed=False, identifier='*CHI'
 
     append_current_utterance()
 
+    # Compute time in ms
     def total_time_in_utterance(utt_dict):
         total_ms = 0
         for (a_str, b_str) in utt_dict['timestamps']:
@@ -69,47 +71,62 @@ def parse_chat_file(filepath, csv_output_path, detailed=False, identifier='*CHI'
             total_ms += (b - a)
         return total_ms
 
+    # Word count for all/filtered sets
     def count_words_in_text(raw_text):
         tmp = remove_timestamps_regex.sub('', raw_text)
         tmp = remove_brackets_pattern.sub('', tmp)
         words = word_pattern.findall(tmp)
         return len(words)
 
+    # Fallback predicate: ends with [+ number]
     def fallback_is_filtered(clean_text):
-        # default behavior if YAML conditions absent
-        return bool(ends_with_plus_number.search(clean_text))
+        return bool(ends_with_plus_number_at_end.search(clean_text))
 
     is_filtered = filter_predicate if filter_predicate is not None else fallback_is_filtered
 
-    # Overall (kept, in case you still want them)
+    # -------------------------
+    # OLD metrics (keep intact)
+    # -------------------------
     all_time_ms = 0
     all_word_count = 0
 
-    # Per-group accumulators
+    filtered_time_ms = 0
+    filtered_word_count = 0
+    filtered_stall_count = 0
+    filtered_revision_count = 0
+    filtered_total_utt = 0
+
+    # -------------------------
+    # NEW: group metrics (simple/passive + optional other)
+    # -------------------------
     groups = {
         "simple": {"time_ms": 0, "word_count": 0, "stall": 0, "revision": 0, "total": 0},
         "passive": {"time_ms": 0, "word_count": 0, "stall": 0, "revision": 0, "total": 0},
         "other": {"time_ms": 0, "word_count": 0, "stall": 0, "revision": 0, "total": 0},  # safety net
     }
 
+    # Classification helpers (unchanged logic)
     def has_revision(clean_text):
         return '[//' in clean_text
 
     def has_stall(clean_text):
+        # If not revision, check stall markers
         if '[/]' in clean_text:
             return True
         if '&-' in clean_text:
             return True
+        # Check silent pause >= 1.0
         for match in silent_pause_pattern.finditer(clean_text):
             if float(match.group(1)) >= 1.0:
                 return True
         return False
 
-    # Detailed rows
+    # Detailed rows: keep old columns first, append extras
     detail_rows = []
 
     for utt_dict in utterances:
         raw_text = utt_dict['text']
+
         utt_time_ms = total_time_in_utterance(utt_dict)
         all_time_ms += utt_time_ms
 
@@ -121,7 +138,21 @@ def parse_chat_file(filepath, csv_output_path, detailed=False, identifier='*CHI'
         if not is_filtered(cleaned_no_ts):
             continue
 
-        # Extract item id from trailing [+ xx]
+        # ---- OLD "filtered" accumulation ----
+        filtered_time_ms += utt_time_ms
+        filtered_word_count += num_words
+        filtered_total_utt += 1
+
+        if has_revision(cleaned_no_ts):
+            cls = 'revision'
+            filtered_revision_count += 1
+        elif has_stall(cleaned_no_ts):
+            cls = 'stall'
+            filtered_stall_count += 1
+        else:
+            cls = 'n/a'
+
+        # ---- NEW: item_id + group assignment ----
         m = plus_item_at_end.search(cleaned_no_ts)
         item_id = int(m.group(1)) if m else None
 
@@ -132,28 +163,36 @@ def parse_chat_file(filepath, csv_output_path, detailed=False, identifier='*CHI'
         else:
             gname = "other"
 
-        groups[gname]["time_ms"] += utt_time_ms
-        groups[gname]["word_count"] += num_words
-        groups[gname]["total"] += 1
-
-        if has_revision(cleaned_no_ts):
-            cls = "revision"
-            groups[gname]["revision"] += 1
-        elif has_stall(cleaned_no_ts):
-            cls = "stall"
-            groups[gname]["stall"] += 1
-        else:
-            cls = "n/a"
+        g = groups[gname]
+        g["time_ms"] += utt_time_ms
+        g["word_count"] += num_words
+        g["total"] += 1
+        if cls == "revision":
+            g["revision"] += 1
+        elif cls == "stall":
+            g["stall"] += 1
 
         if detailed:
-            detail_rows.append([cleaned_no_ts, item_id if item_id is not None else "", gname, cls])
+            # Keep old first two columns: Utterance, Classification
+            detail_rows.append([cleaned_no_ts, cls, item_id if item_id is not None else "", gname])
 
+    # ---- OLD computed metrics ----
+    all_time_s = all_time_ms / 1000.0
+    filtered_time_s = filtered_time_ms / 1000.0
+
+    wpm_all = (all_word_count / all_time_s) * 60 if all_time_s > 0 else 0.0
+    wpm_filtered = (filtered_word_count / filtered_time_s) * 60 if filtered_time_s > 0 else 0.0
+
+    filtered_stall_rate = filtered_stall_count / filtered_total_utt if filtered_total_utt else 0.0
+    filtered_revision_rate = filtered_revision_count / filtered_total_utt if filtered_total_utt else 0.0
+
+    # ---- NEW computed metrics ----
     def finalize_group(g):
         time_s = g["time_ms"] / 1000.0
         total = g["total"]
         stall = g["stall"]
         revision = g["revision"]
-        disrupted = stall + revision
+        disrupted = stall + revision  # mutually exclusive by construction
 
         wpm = (g["word_count"] / time_s) * 60 if time_s > 0 else 0.0
         stall_rate = stall / total if total else 0.0
@@ -161,8 +200,6 @@ def parse_chat_file(filepath, csv_output_path, detailed=False, identifier='*CHI'
         non_disrupted_rate = (total - disrupted) / total if total else 0.0
 
         return {
-            "time_s": time_s,
-            "word_count": g["word_count"],
             "total": total,
             "stall": stall,
             "revision": revision,
@@ -174,27 +211,45 @@ def parse_chat_file(filepath, csv_output_path, detailed=False, identifier='*CHI'
 
     simple_metrics = finalize_group(groups["simple"])
     passive_metrics = finalize_group(groups["passive"])
-    other_metrics = finalize_group(groups["other"])
 
-    # Write the detail CSV
+    # Write the detail CSV (old columns preserved; new columns appended)
     if detailed:
+        os.makedirs(os.path.dirname(csv_output_path) or ".", exist_ok=True)
         with open(csv_output_path, 'w', newline='', encoding='utf-8') as out_csv:
             writer = csv.writer(out_csv)
-            writer.writerow(["Utterance", "ItemID", "Group", "Classification"])
+            writer.writerow(["Utterance", "Classification", "ItemID", "Group"])
             writer.writerows(detail_rows)
 
-    # Keep overall "all" metrics too (optional / backward-compat)
-    all_time_s = all_time_ms / 1000.0
-    wpm_all = (all_word_count / all_time_s) * 60 if all_time_s > 0 else 0.0
-
     return {
-        "time_all": all_time_s,
-        "word_count_all": all_word_count,
-        "wpm_all": wpm_all,
+        # ---- OLD keys (unchanged) ----
+        'time_all': all_time_s,
+        'time_filtered': filtered_time_s,
+        'word_count_all': all_word_count,
+        'word_count_filtered': filtered_word_count,
+        'wpm_all': wpm_all,
+        'wpm_filtered': wpm_filtered,
+        'filtered_stall_count': filtered_stall_count,
+        'filtered_revision_count': filtered_revision_count,
+        'filtered_total_utterances': filtered_total_utt,
+        'filtered_stall_rate': filtered_stall_rate,
+        'filtered_revision_rate': filtered_revision_rate,
 
-        "simple": simple_metrics,
-        "passive": passive_metrics,
-        "other": other_metrics,
+        # ---- NEW keys (including debug counts) ----
+        'total_simple': simple_metrics["total"],
+        'stall_count_simple': simple_metrics["stall"],
+        'revision_count_simple': simple_metrics["revision"],
+        'stall_rate_simple': simple_metrics["stall_rate"],
+        'revision_rate_simple': simple_metrics["revision_rate"],
+        'non_disrupted_rate_simple': simple_metrics["non_disrupted_rate"],
+        'wpm_simple': simple_metrics["wpm"],
+
+        'total_passive': passive_metrics["total"],
+        'stall_count_passive': passive_metrics["stall"],
+        'revision_count_passive': passive_metrics["revision"],
+        'stall_rate_passive': passive_metrics["stall_rate"],
+        'revision_rate_passive': passive_metrics["revision_rate"],
+        'non_disrupted_rate_passive': passive_metrics["non_disrupted_rate"],
+        'wpm_passive': passive_metrics["wpm"],
     }
 
 
@@ -208,6 +263,10 @@ def parse_all_chat_files_in_folder(folder_path, summary_csv_path,
 
     summary_rows = []
 
+    # Ensure details folder exists if detailed output is enabled
+    if detailed and details_folder:
+        os.makedirs(details_folder, exist_ok=True)
+
     for root, dirs, files in os.walk(folder_path):
         for fname in files:
             if fname.lower().endswith(file_extension):
@@ -215,39 +274,72 @@ def parse_all_chat_files_in_folder(folder_path, summary_csv_path,
                 detail_csv_name = os.path.splitext(fname)[0] + details_path
                 detail_csv_path = os.path.join(details_folder, detail_csv_name)
 
-                metrics = parse_chat_file(full_path, detail_csv_path, detailed, filter_predicate=filter_predicate)
+                metrics = parse_chat_file(
+                    full_path,
+                    detail_csv_path,
+                    detailed=detailed,
+                    filter_predicate=filter_predicate
+                )
 
-                sm = metrics["simple"]
-                pm = metrics["passive"]
-
+                # --- OLD columns (unchanged) + NEW appended columns ---
                 summary_rows.append([
                     fname,
+                    f"{metrics['time_all']:.2f}",
+                    f"{metrics['time_filtered']:.2f}",
+                    metrics['word_count_all'],
+                    metrics['word_count_filtered'],
+                    f"{metrics['wpm_all']:.2f}",
+                    f"{metrics['wpm_filtered']:.2f}",
+                    metrics['filtered_stall_count'],
+                    metrics['filtered_revision_count'],
+                    metrics['filtered_total_utterances'],
+                    f"{metrics['filtered_stall_rate']:.4f}",
+                    f"{metrics['filtered_revision_rate']:.4f}",
 
-                    sm["total"],
-                    f"{sm['stall_rate']:.4f}",
-                    f"{sm['revision_rate']:.4f}",
-                    f"{sm['non_disrupted_rate']:.4f}",
-                    f"{sm['wpm']:.2f}",
+                    # NEW: Simple (with debug counts)
+                    metrics['total_simple'],
+                    metrics['stall_count_simple'],
+                    metrics['revision_count_simple'],
+                    f"{metrics['stall_rate_simple']:.4f}",
+                    f"{metrics['revision_rate_simple']:.4f}",
+                    f"{metrics['non_disrupted_rate_simple']:.4f}",
+                    f"{metrics['wpm_simple']:.2f}",
 
-                    pm["total"],
-                    f"{pm['stall_rate']:.4f}",
-                    f"{pm['revision_rate']:.4f}",
-                    f"{pm['non_disrupted_rate']:.4f}",
-                    f"{pm['wpm']:.2f}",
+                    # NEW: Passive (with debug counts)
+                    metrics['total_passive'],
+                    metrics['stall_count_passive'],
+                    metrics['revision_count_passive'],
+                    f"{metrics['stall_rate_passive']:.4f}",
+                    f"{metrics['revision_rate_passive']:.4f}",
+                    f"{metrics['non_disrupted_rate_passive']:.4f}",
+                    f"{metrics['wpm_passive']:.2f}",
                 ])
 
+    # Write summary CSV (OLD headers preserved + NEW appended headers)
     with open(summary_csv_path, 'w', newline='', encoding='utf-8') as sf:
         writer = csv.writer(sf)
         writer.writerow([
+            # OLD headers (unchanged)
             "Filename",
+            "TimeAll_sec", "TimeFiltered_sec",
+            "WordCountAll", "WordCountFiltered",
+            "WPM_All", "WPM_Filtered",
+            "StallCount_Filtered", "RevisionCount_Filtered",
+            "TotalUtterances_Filtered", "StallRate_Filtered", "RevisionRate_Filtered",
 
+            # NEW headers: Simple (include debug counts)
             "TotalUtterances_Simple",
+            "StallCount_Simple",
+            "RevisionCount_Simple",
             "StallRate_Simple",
             "RevisionRate_Simple",
             "NonDisruptedRate_Simple",
             "WPM_Simple",
 
+            # NEW headers: Passive (include debug counts)
             "TotalUtterances_Passive",
+            "StallCount_Passive",
+            "RevisionCount_Passive",
             "StallRate_Passive",
             "RevisionRate_Passive",
             "NonDisruptedRate_Passive",
@@ -267,6 +359,7 @@ def load_config(yaml_path="config.yaml"):
         "details_folder": "./output_details/",
         "folder_to_process": "./test_folder/",
         "summary_csv": "summary_TD.csv",
+        # Filter conditions (if omitted, fallback to trailing [+ number] rule)
         "conditions": None
     }
 
@@ -328,6 +421,7 @@ def build_filter_predicate(conditions):
 
 
 if __name__ == "__main__":
+    # Load parameters from YAML
     cfg_path = os.environ.get("CONFIG_YAML_PATH", "config.yaml")
     cfg = load_config(cfg_path)
 
@@ -338,6 +432,7 @@ if __name__ == "__main__":
     folder_to_process = cfg["folder_to_process"]
     summary_csv = cfg["summary_csv"]
 
+    # Build the filter predicate from YAML (falls back if not present)
     filter_predicate = build_filter_predicate(cfg.get("conditions"))
 
     parse_all_chat_files_in_folder(
